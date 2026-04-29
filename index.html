@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>スイカゲーム</title>
+<title>Fruit Drop AI</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -195,6 +195,52 @@ body {
 #rl-preview-score { font-size: 11px; color: #f59e0b; margin-top: 4px; font-family: monospace; min-height: 16px; }
 .chart-legend { display: flex; gap: 10px; font-size: 10px; color: #7d8590; margin-bottom: 4px; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; }
+
+/* ── Mobile layout ── */
+@media (max-width: 600px) {
+    body {
+        align-items: flex-start;
+        justify-content: center;
+        min-height: 100svh;
+    }
+    #app { width: 100%; }
+
+    /* stack canvas above sidebar */
+    #wrap { flex-direction: column; align-items: stretch; gap: 0; }
+
+    /* canvas fills viewport width; aspect-ratio preserves 400×660 internal coords */
+    #mainCanvas {
+        width: 100% !important;
+        aspect-ratio: 400 / 660;
+        height: auto !important;
+    }
+
+    /* compact horizontal sidebar strip */
+    #sidebar {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 10px;
+    }
+    .sb-label { display: none; }
+    .sb-score { font-size: 28px; font-weight: 700; margin: 0; flex: 1; }
+    .sb-next-box { width: 54px; height: 54px; margin: 0; }
+    #nextCanvas { width: 54px !important; height: 54px !important; }
+    #restartBtn, #aiBtn, #kirbyBtn {
+        flex: 1;
+        min-width: 72px;
+        margin: 0;
+        padding: 8px 4px;
+        font-size: 12px;
+    }
+    .sb-hint { display: none; }
+    .sb-fruit-list { display: none; }
+
+    /* hide RL training panel on mobile */
+    #rl-panel { display: none; }
+}
 </style>
 </head>
 <body>
