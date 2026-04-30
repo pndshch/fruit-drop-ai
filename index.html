@@ -70,7 +70,7 @@ body {
     transition: background 0.15s;
 }
 #restartBtn:hover { background: #2ea043; }
-#aiBtn, #pomBtn {
+#aiBtn, #pomBtn, #batBtn {
     display: block;
     width: 100%;
     padding: 9px 12px;
@@ -93,7 +93,12 @@ body {
     border-color: #ec4899;
     box-shadow: 0 0 8px rgba(236,72,153,0.4);
 }
-#aiBtn:hover, #pomBtn:hover { filter: brightness(1.15); }
+#batBtn.on {
+    background: #312060;
+    border-color: #7c3aed;
+    box-shadow: 0 0 8px rgba(120,60,220,0.5);
+}
+#aiBtn:hover, #pomBtn:hover, #batBtn:hover { filter: brightness(1.15); }
 .sb-hint {
     font-size: 11px;
     color: #484f58;
@@ -228,12 +233,12 @@ body {
     .sb-score { font-size: 28px; font-weight: 700; margin: 0; flex: 1; }
     .sb-next-box { width: 54px; height: 54px; margin: 0; }
     #nextCanvas { width: 54px !important; height: 54px !important; }
-    #restartBtn, #aiBtn, #pomBtn {
+    #restartBtn, #aiBtn, #pomBtn, #batBtn {
         flex: 1;
-        min-width: 72px;
+        min-width: 60px;
         margin: 0;
-        padding: 8px 4px;
-        font-size: 12px;
+        padding: 8px 2px;
+        font-size: 11px;
     }
     .sb-hint { display: none; }
     .sb-fruit-list { display: none; }
@@ -257,6 +262,7 @@ body {
         <button id="restartBtn" onclick="restart()">リスタート</button>
         <button id="aiBtn" onclick="toggleAI()">🤖 AIモード: OFF</button>
         <button id="pomBtn" onclick="togglePom()">🌟 ポム: ON</button>
+        <button id="batBtn" onclick="toggleBat()">🦇 クロ: ON</button>
         <div class="sb-hint" id="hintText">
             マウスで左右移動<br>
             クリックで落とす
@@ -366,6 +372,18 @@ let pomJumpCd  = 180;   // ジャンプクールダウン
 let pomPushCd  = 0;     // 押し付けクールダウン
 let pomPushing = false; // 現在押し付け中か
 
+// ── Bat (クロ) state ────────────────────────────────────────────────────────
+const BR = 14;           // bat body radius
+const BAT_CRUISE_Y = 70; // cruising altitude (updated after DY is known)
+let batX = 280, batY = 70;
+let batFacing = -1;
+let batWingF  = 0;
+let batEnabled = true;
+let batState = 'cruising'; // cruising | diving | tapping | returning
+let batTargetFruit = null;
+let batTargetDestX = null;
+let batCd = 180;
+
 // ── Game state ─────────────────────────────────────────────────────────────
 let engine, world, runner, animId;
 let bodies = [];
@@ -470,6 +488,7 @@ function init() {
     runner = Runner.create();
     Runner.run(runner, engine);
     initPom();
+    initBat();
     animId = requestAnimationFrame(loop);
 }
 
@@ -743,6 +762,201 @@ function drawPom() {
     cx.restore();
 }
 
+// ── Bat (クロ) ──────────────────────────────────────────────────────────────
+
+function toggleBat() {
+    batEnabled = !batEnabled;
+    const btn = document.getElementById('batBtn');
+    btn.textContent = batEnabled ? '🦇 クロ: ON' : '🦇 クロ: OFF';
+    btn.classList.toggle('on', batEnabled);
+    if (!batEnabled) { batState = 'cruising'; batTargetFruit = null; }
+}
+
+function initBat() {
+    batX = CW * 0.7; batY = DY + 35;
+    batFacing = -1; batWingF = 0;
+    batState = 'cruising'; batTargetFruit = null; batTargetDestX = null;
+    batCd = 180;
+}
+
+// 高い位置にある同種ペアを探す（緊急度の高い合体が優先）
+function findBatTarget() {
+    let best = null, bestScore = -Infinity;
+    for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+            const a = bodies[i], b = bodies[j];
+            if (a.fruitType !== b.fruitType) continue;
+            if (a.fruitType >= FRUITS.length - 1) continue;
+            const r  = FRUITS[a.fruitType].r;
+            const dx = Math.abs(a.position.x - b.position.x);
+            if (dx < 40 || dx > 280) continue;
+            // 高い方のフルーツを掴み対象にする
+            const topFruit = a.position.y <= b.position.y ? a : b;
+            const topY = topFruit.position.y - r;
+            if (topY > IB - 120) continue; // 底付近は届かない
+            // 危険ゾーンに近いほど緊急度アップ
+            const urgency = Math.max(0, DY + 250 - topFruit.position.y) * 0.6;
+            const sc = r + urgency - dx * 0.1;
+            if (sc > bestScore) {
+                bestScore = sc;
+                const other = topFruit === a ? b : a;
+                best = { fruit: topFruit, destX: other.position.x };
+            }
+        }
+    }
+    return best;
+}
+
+function updateBat() {
+    if (!batEnabled || over) return;
+    batWingF++;
+    if (batCd > 0) batCd--;
+    const cruiseY = DY + 35;
+
+    if (batState === 'cruising') {
+        if (batX < IL + 20) batFacing = 1;
+        else if (batX > IR - 20) batFacing = -1;
+        batX += batFacing * 3.0;
+        batY += (cruiseY - batY) * 0.06;
+        if (batCd <= 0) {
+            const t = findBatTarget();
+            if (t) {
+                batTargetFruit = t.fruit; batTargetDestX = t.destX;
+                batState = 'diving';
+                batFacing = t.destX > t.fruit.position.x ? 1 : -1;
+            } else { batCd = 40; }
+        }
+
+    } else if (batState === 'diving') {
+        if (!batTargetFruit || !bodies.includes(batTargetFruit)) {
+            batState = 'returning'; batCd = 60; return;
+        }
+        const r  = FRUITS[batTargetFruit.fruitType].r;
+        const tx = batTargetFruit.position.x;
+        const ty = batTargetFruit.position.y - r - 10;
+        batX += (tx - batX) * 0.14;
+        batY += (ty - batY) * 0.14;
+        batFacing = Math.sign(batTargetDestX - tx);
+        if (Math.abs(batX - tx) < 14 && Math.abs(batY - ty) < 14) {
+            // 弾き飛ばし!
+            const pushDir = Math.sign(batTargetDestX - tx);
+            Matter.Body.setVelocity(batTargetFruit, {
+                x: pushDir * 8,
+                y: batTargetFruit.velocity.y - 0.5,
+            });
+            batState = 'tapping'; batCd = 18;
+        }
+
+    } else if (batState === 'tapping') {
+        if (batCd <= 0) {
+            batTargetFruit = null; batTargetDestX = null;
+            batState = 'returning'; batCd = 220;
+        }
+
+    } else if (batState === 'returning') {
+        batX += batFacing * 3.5;
+        batY += (cruiseY - batY) * 0.12;
+        if (Math.abs(batY - cruiseY) < 15 && batCd <= 0) batState = 'cruising';
+    }
+}
+
+function drawBat() {
+    if (!batEnabled) return;
+    const wf = batWingF * 0.25;
+    const wingY  = Math.sin(wf) * 20;
+    const isTap  = batState === 'tapping';
+
+    cx.save();
+    cx.translate(batX, batY);
+    if (batFacing < 0) cx.scale(-1, 1);
+
+    // 翼（左右対称に描いてから scale で反転）
+    cx.fillStyle = isTap ? '#6030c0' : '#1e0d3a';
+    for (const sx of [-1, 1]) {
+        cx.beginPath();
+        cx.moveTo(sx * 4, 0);
+        cx.quadraticCurveTo(sx * 22, -wingY, sx * 38, wingY * 0.4);
+        cx.quadraticCurveTo(sx * 24,  10,    sx * 4,   8);
+        cx.fill();
+        // 翼先の小さな切れ込み
+        cx.fillStyle = '#0d1117';
+        cx.beginPath();
+        cx.moveTo(sx * 30, wingY * 0.2);
+        cx.lineTo(sx * 36, wingY * 0.5);
+        cx.lineTo(sx * 28, wingY * 0.5);
+        cx.fill();
+        cx.fillStyle = isTap ? '#6030c0' : '#1e0d3a';
+    }
+
+    // 体
+    const bg = cx.createRadialGradient(-BR * 0.3, -BR * 0.3, BR * 0.05, 0, 0, BR);
+    bg.addColorStop(0,   '#7040c0');
+    bg.addColorStop(0.6, '#2a1060');
+    bg.addColorStop(1,   '#0d0520');
+    cx.beginPath();
+    cx.ellipse(0, 1, BR * 0.65, BR * 0.85, 0, 0, Math.PI * 2);
+    cx.fillStyle = bg; cx.fill();
+    cx.strokeStyle = '#5020a0'; cx.lineWidth = 1; cx.stroke();
+
+    // 耳
+    cx.fillStyle = '#150830';
+    for (const sx of [-1, 1]) {
+        cx.beginPath();
+        cx.moveTo(sx * 5,  -BR * 0.55);
+        cx.lineTo(sx * BR * 0.68, -BR * 1.35);
+        cx.lineTo(sx * 2,  -BR * 0.82);
+        cx.fill();
+    }
+
+    // 目（赤いグロー）
+    for (const sx of [-1, 1]) {
+        cx.fillStyle = 'rgba(255,40,40,0.22)';
+        cx.beginPath();
+        cx.arc(sx * BR * 0.3, -BR * 0.05, BR * 0.3, 0, Math.PI * 2);
+        cx.fill();
+        cx.fillStyle = isTap ? '#ff9040' : '#ff2020';
+        cx.beginPath();
+        cx.arc(sx * BR * 0.3, -BR * 0.05, BR * 0.13, 0, Math.PI * 2);
+        cx.fill();
+    }
+
+    // 牙
+    cx.fillStyle = '#f0e8ff';
+    for (const sx of [-1, 1]) {
+        cx.beginPath();
+        cx.moveTo(sx * BR * 0.18, BR * 0.35);
+        cx.lineTo(sx * BR * 0.28, BR * 0.62);
+        cx.lineTo(sx * BR * 0.08, BR * 0.38);
+        cx.fill();
+    }
+
+    cx.restore();
+
+    // ターゲットへの照準線（急降下中）
+    if (batState === 'diving' && batTargetFruit && bodies.includes(batTargetFruit)) {
+        cx.save();
+        cx.strokeStyle = 'rgba(160,60,255,0.4)';
+        cx.lineWidth = 1.2;
+        cx.setLineDash([4, 5]);
+        cx.beginPath();
+        cx.moveTo(batX, batY + BR);
+        cx.lineTo(batTargetFruit.position.x, batTargetFruit.position.y);
+        cx.stroke();
+        cx.setLineDash([]);
+        cx.restore();
+    }
+
+    // 弾き飛ばし時のフラッシュ
+    if (isTap) {
+        cx.save();
+        cx.fillStyle = 'rgba(200,100,255,0.55)';
+        cx.beginPath();
+        cx.arc(batX, batY, BR * 2.2, 0, Math.PI * 2);
+        cx.fill();
+        cx.restore();
+    }
+}
+
 // ── Drawing ────────────────────────────────────────────────────────────────
 function drawFruit(c, x, y, type, alpha) {
     const f = FRUITS[type];
@@ -840,6 +1054,7 @@ function render() {
         drawFruit(cx, b.position.x, b.position.y, b.fruitType);
     }
     drawPom();
+    drawBat();
     cx.restore();
 
     // Walls drawn on top to visually clip fruits at edges
@@ -903,6 +1118,7 @@ function loop(ts) {
 
     aiUpdate(ts);
     updatePom();
+    updateBat();
 
     particles = particles.filter(p => {
         p.x += p.vx;
