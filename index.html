@@ -70,7 +70,7 @@ body {
     transition: background 0.15s;
 }
 #restartBtn:hover { background: #2ea043; }
-#aiBtn, #kirbyBtn {
+#aiBtn, #pomBtn {
     display: block;
     width: 100%;
     padding: 9px 12px;
@@ -88,12 +88,12 @@ body {
     border-color: #7c3aed;
     box-shadow: 0 0 8px rgba(124,58,237,0.5);
 }
-#kirbyBtn.on {
+#pomBtn.on {
     background: #be185d;
     border-color: #ec4899;
     box-shadow: 0 0 8px rgba(236,72,153,0.4);
 }
-#aiBtn:hover, #kirbyBtn:hover { filter: brightness(1.15); }
+#aiBtn:hover, #pomBtn:hover { filter: brightness(1.15); }
 .sb-hint {
     font-size: 11px;
     color: #484f58;
@@ -228,7 +228,7 @@ body {
     .sb-score { font-size: 28px; font-weight: 700; margin: 0; flex: 1; }
     .sb-next-box { width: 54px; height: 54px; margin: 0; }
     #nextCanvas { width: 54px !important; height: 54px !important; }
-    #restartBtn, #aiBtn, #kirbyBtn {
+    #restartBtn, #aiBtn, #pomBtn {
         flex: 1;
         min-width: 72px;
         margin: 0;
@@ -256,7 +256,7 @@ body {
         </div>
         <button id="restartBtn" onclick="restart()">リスタート</button>
         <button id="aiBtn" onclick="toggleAI()">🤖 AIモード: OFF</button>
-        <button id="kirbyBtn" onclick="toggleKirby()">🩷 カービィ: ON</button>
+        <button id="pomBtn" onclick="togglePom()">🌟 ポム: ON</button>
         <div class="sb-hint" id="hintText">
             マウスで左右移動<br>
             クリックで落とす
@@ -356,15 +356,15 @@ const cx = cv.getContext('2d');
 const nv = document.getElementById('nextCanvas');
 const nx = nv.getContext('2d');
 
-// ── Kirby state ────────────────────────────────────────────────────────────
-const KR = 26; // Kirby radius
-let kirbyBody = null;
-let kirbyEnabled = true; // 表示/物理 ON/OFF
-let kirbyFacing  = 1;    // 1=右, -1=左
-let kirbyWalkF   = 0;    // アニメーションフレーム
-let kirbyJumpCd  = 180;  // ジャンプクールダウン
-let kirbyChargeCd = 0;   // 突進クールダウン
-let kirbyCharging = false;
+// ── Pom state ──────────────────────────────────────────────────────────────
+const PR = 26; // Pom radius
+let pomBody = null;
+let pomEnabled = true;  // 表示/物理 ON/OFF
+let pomFacing  = 1;     // 1=右, -1=左
+let pomWalkF   = 0;     // アニメーションフレーム
+let pomJumpCd  = 180;   // ジャンプクールダウン
+let pomPushCd  = 0;     // 押し付けクールダウン
+let pomPushing = false; // 現在押し付け中か
 
 // ── Game state ─────────────────────────────────────────────────────────────
 let engine, world, runner, animId;
@@ -469,7 +469,7 @@ function init() {
 
     runner = Runner.create();
     Runner.run(runner, engine);
-    initKirby();
+    initPom();
     animId = requestAnimationFrame(loop);
 }
 
@@ -543,83 +543,127 @@ function gameOver() {
     document.getElementById('overlay').classList.add('show');
 }
 
-// ── Kirby ──────────────────────────────────────────────────────────────────
+// ── Pom ────────────────────────────────────────────────────────────────────
 
-function toggleKirby() {
-    kirbyEnabled = !kirbyEnabled;
-    const btn = document.getElementById('kirbyBtn');
-    btn.textContent = kirbyEnabled ? '🩷 カービィ: ON' : '🩷 カービィ: OFF';
-    btn.classList.toggle('on', kirbyEnabled);
-    if (kirbyEnabled) {
-        initKirby();
-    } else if (kirbyBody) {
-        Composite.remove(world, kirbyBody);
-        kirbyBody = null;
+function togglePom() {
+    pomEnabled = !pomEnabled;
+    const btn = document.getElementById('pomBtn');
+    btn.textContent = pomEnabled ? '🌟 ポム: ON' : '🌟 ポム: OFF';
+    btn.classList.toggle('on', pomEnabled);
+    if (pomEnabled) {
+        initPom();
+    } else if (pomBody) {
+        Composite.remove(world, pomBody);
+        pomBody = null;
     }
 }
 
-function initKirby() {
-    if (!kirbyEnabled) return;
-    if (kirbyBody) Composite.remove(world, kirbyBody);
-    kirbyBody = Bodies.circle(CW / 2, IB - KR - 2, KR, {
-        label: 'kirby',
+function initPom() {
+    if (!pomEnabled) return;
+    if (pomBody) Composite.remove(world, pomBody);
+    pomBody = Bodies.circle(CW / 2, IB - PR - 2, PR, {
+        label: 'pom',
         restitution: 0.25,
         friction: 0.85,
         frictionAir: 0.012,
-        density: 0.007, // フルーツより重い → 押し飛ばせる
+        density: 0.007,
     });
-    Matter.Body.setInertia(kirbyBody, Infinity); // 回転しない
-    Composite.add(world, kirbyBody);
-    kirbyFacing   = Math.random() > 0.5 ? 1 : -1;
-    kirbyWalkF    = 0;
-    kirbyJumpCd   = 200;
-    kirbyChargeCd = 0;
-    kirbyCharging = false;
+    Matter.Body.setInertia(pomBody, Infinity);
+    Composite.add(world, pomBody);
+    pomFacing  = Math.random() > 0.5 ? 1 : -1;
+    pomWalkF   = 0;
+    pomJumpCd  = 200;
+    pomPushCd  = 0;
+    pomPushing = false;
 }
 
-function updateKirby() {
-    if (!kirbyBody || over) return;
-    const pos = kirbyBody.position;
-    const vel = kirbyBody.velocity;
-    kirbyWalkF++;
-
-    if (kirbyChargeCd > 0) kirbyChargeCd--;
-
-    // ランダムに突進チャージ開始
-    if (!kirbyCharging && kirbyChargeCd <= 0 && Math.random() < 0.004) {
-        kirbyCharging = true;
-        kirbyChargeCd = 260;
-        kirbyFacing = pos.x < CW / 2 ? 1 : -1; // 中央に向かって突進
-        setTimeout(() => { kirbyCharging = false; }, 600 + Math.random() * 400);
+// 合体させられる同種フルーツのペアを探す
+function findPomTarget() {
+    let best = null, bestScore = -Infinity;
+    for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+            const a = bodies[i], b = bodies[j];
+            if (a.fruitType !== b.fruitType) continue;
+            if (a.fruitType >= FRUITS.length - 1) continue;
+            const r = FRUITS[a.fruitType].r;
+            const dx = a.position.x - b.position.x;
+            const dy = a.position.y - b.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const hDist = Math.abs(dx);
+            // 既に接触中・水平差が小さすぎ・遠すぎはスキップ
+            if (dist < r * 2.4 || hDist < 10 || hDist > 220) continue;
+            // 大きいフルーツほど合体ボーナスが高い、距離が近いほどよい
+            const sc = r * 2 - dist * 0.25;
+            if (sc > bestScore) { bestScore = sc; best = { a, b }; }
+        }
     }
-
-    // 壁で反転
-    if (pos.x < IL + KR + 6)        { kirbyFacing = 1;  kirbyCharging = false; }
-    else if (pos.x > IR - KR - 6)   { kirbyFacing = -1; kirbyCharging = false; }
-
-    // 水平速度を直接セット（垂直はそのまま）
-    const spd = kirbyCharging ? 7.5 : 2.4;
-    Matter.Body.setVelocity(kirbyBody, { x: kirbyFacing * spd, y: vel.y });
-
-    // ランダムジャンプ
-    kirbyJumpCd--;
-    if (kirbyJumpCd <= 0 && Math.abs(vel.y) < 1) {
-        Matter.Body.setVelocity(kirbyBody, { x: vel.x, y: -17 });
-        kirbyJumpCd = 160 + Math.floor(Math.random() * 220);
-    }
-
-    // 常に直立を保つ
-    Matter.Body.setAngle(kirbyBody, 0);
-    Matter.Body.setAngularVelocity(kirbyBody, 0);
+    return best;
 }
 
-function drawKirby() {
-    if (!kirbyBody) return;
-    const { x, y } = kirbyBody.position;
-    const fb  = Math.sin(kirbyWalkF * 0.18) * (kirbyCharging ? 7 : 3.5);
-    const es  = kirbyFacing * KR * 0.04; // 目の向き補正
-    const ey  = kirbyCharging ? -KR * 0.16 : -KR * 0.08;
-    const eyH = kirbyCharging ? KR * 0.07  : KR * 0.15; // 突進中は細目
+function updatePom() {
+    if (!pomBody || over) return;
+    const pos = pomBody.position;
+    const vel = pomBody.velocity;
+    pomWalkF++;
+    if (pomPushCd > 0) pomPushCd--;
+
+    const target = findPomTarget();
+
+    if (target) {
+        const { a, b } = target;
+        // ポムが近い方のフルーツを押す
+        const pusher   = Math.abs(pos.x - a.position.x) <= Math.abs(pos.x - b.position.x) ? a : b;
+        const receiver = pusher === a ? b : a;
+        const pushDir  = Math.sign(receiver.position.x - pusher.position.x);
+        const r        = FRUITS[pusher.fruitType].r;
+        // 押す側と反対に立つ位置
+        const standX   = pusher.position.x - pushDir * (r + PR + 4);
+
+        pomFacing = pushDir;
+        const distToStand = pos.x - standX;
+
+        if (Math.abs(distToStand) > 20) {
+            // 定位置へ移動
+            pomPushing = false;
+            const spd = Math.abs(distToStand) > 60 ? 4.5 : 2.2;
+            Matter.Body.setVelocity(pomBody, { x: -Math.sign(distToStand) * spd, y: vel.y });
+        } else {
+            // 押し付け!
+            pomPushing = true;
+            Matter.Body.setVelocity(pomBody, { x: pushDir * 5.0, y: vel.y });
+        }
+        // 障害物があればジャンプ
+        pomJumpCd--;
+        if (pomJumpCd <= 0 && Math.abs(vel.y) < 1) {
+            Matter.Body.setVelocity(pomBody, { x: vel.x, y: -14 });
+            pomJumpCd = 100 + Math.floor(Math.random() * 120);
+        }
+    } else {
+        // ターゲットなし — ゆっくりうろつく
+        pomPushing = false;
+        if (pos.x < IL + PR + 6)      pomFacing = 1;
+        else if (pos.x > IR - PR - 6) pomFacing = -1;
+        else if (Math.random() < 0.006) pomFacing *= -1;
+
+        Matter.Body.setVelocity(pomBody, { x: pomFacing * 1.8, y: vel.y });
+        pomJumpCd--;
+        if (pomJumpCd <= 0 && Math.abs(vel.y) < 1) {
+            Matter.Body.setVelocity(pomBody, { x: vel.x, y: -13 });
+            pomJumpCd = 180 + Math.floor(Math.random() * 200);
+        }
+    }
+
+    Matter.Body.setAngle(pomBody, 0);
+    Matter.Body.setAngularVelocity(pomBody, 0);
+}
+
+function drawPom() {
+    if (!pomBody) return;
+    const { x, y } = pomBody.position;
+    const fb  = Math.sin(pomWalkF * 0.18) * (pomPushing ? 7 : 3.5);
+    const es  = pomFacing * PR * 0.04;
+    const ey  = pomPushing ? -PR * 0.18 : -PR * 0.08;
+    const eyH = pomPushing ? PR * 0.09  : PR * 0.15;
 
     cx.save();
     cx.translate(x, y);
@@ -627,74 +671,73 @@ function drawKirby() {
     // 影
     cx.fillStyle = 'rgba(0,0,0,0.18)';
     cx.beginPath();
-    cx.ellipse(0, KR * 0.85, KR * 0.7, KR * 0.16, 0, 0, Math.PI * 2);
+    cx.ellipse(0, PR * 0.85, PR * 0.7, PR * 0.16, 0, 0, Math.PI * 2);
     cx.fill();
 
-    // 体（ラジアルグラデ）
-    const g = cx.createRadialGradient(-KR*.28, -KR*.28, KR*.06, 0, 0, KR);
-    g.addColorStop(0,   '#ffd8ec');
-    g.addColorStop(0.5, '#ff85c0');
-    g.addColorStop(1,   '#d04090');
-    cx.beginPath(); cx.arc(0, 0, KR, 0, Math.PI * 2);
+    // 体（黄色みがかったピンク = 親切な印象）
+    const g = cx.createRadialGradient(-PR*.28, -PR*.28, PR*.06, 0, 0, PR);
+    g.addColorStop(0,   '#fff4c2');
+    g.addColorStop(0.5, '#ffd166');
+    g.addColorStop(1,   '#e8a020');
+    cx.beginPath(); cx.arc(0, 0, PR, 0, Math.PI * 2);
     cx.fillStyle = g; cx.fill();
-    cx.strokeStyle = '#a02868'; cx.lineWidth = 1.5; cx.stroke();
+    cx.strokeStyle = '#c07010'; cx.lineWidth = 1.5; cx.stroke();
 
     // ほっぺ
-    cx.fillStyle = 'rgba(255,50,110,0.30)';
+    cx.fillStyle = 'rgba(255,130,30,0.28)';
     for (const sx of [-1, 1]) {
         cx.beginPath();
-        cx.ellipse(sx * KR * 0.54, KR * 0.26, KR * 0.22, KR * 0.14, 0, 0, Math.PI * 2);
+        cx.ellipse(sx * PR * 0.54, PR * 0.26, PR * 0.22, PR * 0.14, 0, 0, Math.PI * 2);
         cx.fill();
     }
 
-    // 目
+    // 目（押し中は弧目ハート目）
     for (const sx of [-1, 1]) {
-        cx.fillStyle = '#120820';
+        cx.fillStyle = '#2a1000';
         cx.beginPath();
-        cx.ellipse(sx * KR * 0.28 + es, ey, KR * 0.11, eyH, 0, 0, Math.PI * 2);
+        cx.ellipse(sx * PR * 0.28 + es, ey, PR * 0.11, eyH, 0, 0, Math.PI * 2);
         cx.fill();
         cx.fillStyle = 'white';
         cx.beginPath();
-        cx.arc(sx * KR * 0.24 + es, ey - KR * 0.05, KR * 0.04, 0, Math.PI * 2);
+        cx.arc(sx * PR * 0.24 + es, ey - PR * 0.05, PR * 0.04, 0, Math.PI * 2);
         cx.fill();
     }
 
-    // 口
-    if (kirbyCharging) {
-        cx.fillStyle = '#600028';
-        cx.beginPath();
-        cx.ellipse(es, KR * 0.3, KR * 0.16, KR * 0.11, 0, 0, Math.PI * 2);
-        cx.fill();
-        cx.fillStyle = '#ff3878';
-        cx.beginPath();
-        cx.ellipse(es, KR * 0.31, KR * 0.10, KR * 0.07, 0, 0, Math.PI * 2);
-        cx.fill();
+    // 口（押し中はにっこり大きめ、通常は小さいスマイル）
+    cx.strokeStyle = '#7a3800'; cx.lineWidth = 1.8;
+    cx.beginPath();
+    if (pomPushing) {
+        cx.arc(es, PR * 0.05, PR * 0.22, 0.2, Math.PI - 0.2);
     } else {
-        cx.strokeStyle = '#600028'; cx.lineWidth = 1.8;
-        cx.beginPath();
-        cx.arc(es, KR * 0.08, KR * 0.18, 0.25, Math.PI - 0.25);
-        cx.stroke();
+        cx.arc(es, PR * 0.08, PR * 0.18, 0.25, Math.PI - 0.25);
     }
+    cx.stroke();
 
     // 足（アニメーション）
-    cx.fillStyle = kirbyCharging ? '#ff5098' : '#d04090';
+    cx.fillStyle = pomPushing ? '#ffaa00' : '#e8a020';
     for (const [sx, sign] of [[-1, 1], [1, -1]]) {
         cx.beginPath();
         cx.ellipse(
-            sx * KR * 0.4,
-            KR * 0.76 + sign * (kirbyFacing > 0 ? fb : -fb),
-            KR * 0.22, KR * 0.15, 0, 0, Math.PI * 2
+            sx * PR * 0.4,
+            PR * 0.76 + sign * (pomFacing > 0 ? fb : -fb),
+            PR * 0.22, PR * 0.15, 0, 0, Math.PI * 2
         );
         cx.fill();
     }
 
-    // 突進中の腕
-    if (kirbyCharging) {
-        cx.fillStyle = '#ff99cc';
+    // 押し中の腕（前に伸ばす）
+    if (pomPushing) {
+        cx.fillStyle = '#ffd166';
         cx.beginPath();
-        cx.ellipse(kirbyFacing * KR * 0.9, KR * 0.08, KR * 0.18, KR * 0.13,
-                   kirbyFacing * 0.55, 0, Math.PI * 2);
+        cx.ellipse(pomFacing * PR * 0.9, PR * 0.08, PR * 0.18, PR * 0.13,
+                   pomFacing * 0.55, 0, Math.PI * 2);
         cx.fill();
+        // ハートマーク（お助け中）
+        cx.fillStyle = 'rgba(255,80,120,0.85)';
+        cx.font = `${PR * 0.7}px serif`;
+        cx.textAlign = 'center';
+        cx.textBaseline = 'middle';
+        cx.fillText('♡', 0, -PR * 1.4);
     }
 
     cx.restore();
@@ -796,7 +839,7 @@ function render() {
     for (const b of bodies) {
         drawFruit(cx, b.position.x, b.position.y, b.fruitType);
     }
-    drawKirby(); // フルーツの上にカービィを描画
+    drawPom();
     cx.restore();
 
     // Walls drawn on top to visually clip fruits at edges
@@ -859,7 +902,7 @@ function loop(ts) {
     lastT = ts;
 
     aiUpdate(ts);
-    updateKirby();
+    updatePom();
 
     particles = particles.filter(p => {
         p.x += p.vx;
