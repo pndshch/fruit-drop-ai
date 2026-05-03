@@ -21,9 +21,22 @@ body {
     gap: 16px;
     align-items: flex-start;
 }
-#mainCanvas {
-    display: block;
+#game3d {
+    position: relative;
+    width: 400px;
+    height: 660px;
     cursor: none;
+}
+#game3d canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+}
+#overlay2d {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    z-index: 2;
 }
 #sidebar {
     color: #e6edf3;
@@ -121,7 +134,7 @@ body {
     border-radius: 50%;
     flex-shrink: 0;
 }
-#overlay {
+#gameOverlay {
     display: none;
     position: fixed;
     inset: 0;
@@ -129,7 +142,7 @@ body {
     place-items: center;
     z-index: 100;
 }
-#overlay.show { display: grid; }
+#gameOverlay.show { display: grid; }
 #modal {
     background: #161b22;
     border: 1px solid #30363d;
@@ -209,18 +222,12 @@ body {
         min-height: 100svh;
     }
     #app { width: 100%; }
-
-    /* stack canvas above sidebar */
     #wrap { flex-direction: column; align-items: stretch; gap: 0; }
-
-    /* canvas fills viewport width; aspect-ratio preserves 400×660 internal coords */
-    #mainCanvas {
+    #game3d {
         width: 100% !important;
         aspect-ratio: 400 / 660;
         height: auto !important;
     }
-
-    /* compact horizontal sidebar strip */
     #sidebar {
         width: 100%;
         display: flex;
@@ -242,8 +249,6 @@ body {
     }
     .sb-hint { display: none; }
     .sb-fruit-list { display: none; }
-
-    /* hide RL training panel on mobile */
     #rl-panel { display: none; }
 }
 </style>
@@ -251,7 +256,9 @@ body {
 <body>
 <div id="app">
 <div id="wrap">
-    <canvas id="mainCanvas"></canvas>
+    <div id="game3d">
+        <canvas id="overlay2d" width="400" height="660"></canvas>
+    </div>
     <div id="sidebar">
         <div class="sb-label">スコア</div>
         <div class="sb-score" id="scoreEl">0</div>
@@ -259,10 +266,10 @@ body {
         <div class="sb-next-box">
             <canvas id="nextCanvas" width="100" height="100"></canvas>
         </div>
-        <button id="restartBtn" onclick="restart()">リスタート</button>
-        <button id="aiBtn" onclick="toggleAI()">🤖 AIモード: OFF</button>
-        <button id="pomBtn" onclick="togglePom()">🌟 ポム: ON</button>
-        <button id="batBtn" onclick="toggleBat()">🦇 クロ: ON</button>
+        <button id="restartBtn">リスタート</button>
+        <button id="aiBtn">🤖 AIモード: OFF</button>
+        <button id="pomBtn">🌟 ポム: ON</button>
+        <button id="batBtn">🦇 クロ: ON</button>
         <div class="sb-hint" id="hintText">
             マウスで左右移動<br>
             クリックで落とす
@@ -272,7 +279,6 @@ body {
 </div><!-- #wrap -->
 
 <div id="rl-panel">
-    <!-- ヘッダー行 -->
     <div class="rl-row" style="margin-bottom:10px">
         <span class="rl-title">🧬 強化学習パネル (遺伝的アルゴリズム)</span>
         <span class="rl-stat">世代 <b id="rl-gen">0</b></span>
@@ -280,9 +286,7 @@ body {
         <span class="rl-stat">現世代 <b id="rl-cur">-</b></span>
         <span class="rl-info" style="margin-left:auto">突然変異 <input type="range" id="rl-speed" min="1" max="8" value="4" style="width:52px"> <span id="rl-speed-val">0.4</span></span>
     </div>
-
     <div id="rl-main">
-        <!-- 左列: グラフ + コントロール -->
         <div id="rl-left">
             <div class="chart-legend">
                 <span><span class="legend-dot" style="background:#f59e0b"></span>最高スコア推移</span>
@@ -292,19 +296,17 @@ body {
             <canvas id="rl-chart"   width="318" height="48"></canvas>
             <div id="rl-genome">ゲノム: 未学習 — 学習開始で重みを探索します</div>
             <div class="rl-row">
-                <button id="rl-btn"   onclick="RL.startStop()">▶ 学習開始</button>
-                <button id="rl-apply" onclick="RL.applyBest()">✓ AIに適用</button>
-                <button id="rl-reset" onclick="RL.reset()">↺ リセット</button>
+                <button id="rl-btn">▶ 学習開始</button>
+                <button id="rl-apply">✓ AIに適用</button>
+                <button id="rl-reset">↺ リセット</button>
             </div>
             <div class="rl-info">個体数:16　エリート:4　突然変異:35%　1試合=2000step</div>
         </div>
-
-        <!-- 右列: 可視化 -->
         <div id="rl-right">
             <div class="rl-row" style="margin-bottom:6px">
                 <span style="font-size:11px;color:#8b949e">可視化</span>
-                <button id="rl-prev-btn"   onclick="RL.togglePreview()" title="各世代後に最優秀個体を8倍速再生">👁 単体</button>
-                <button id="rl-watch-btn"  onclick="RL.toggleWatch()"   title="全16個体をリアルタイム表示">🎮 全体</button>
+                <button id="rl-prev-btn" title="各世代後に最優秀個体を8倍速再生">👁 単体</button>
+                <button id="rl-watch-btn" title="全16個体をリアルタイム表示">🎮 全体</button>
             </div>
             <canvas id="rl-view" width="200" height="280"></canvas>
             <div id="rl-view-info" style="font-size:10px;color:#7d8590;margin-top:3px;min-height:14px"></div>
@@ -313,18 +315,27 @@ body {
 </div>
 
 </div><!-- #app -->
-<div id="overlay">
+<div id="gameOverlay">
     <div id="modal">
         <h2>ゲームオーバー</h2>
         <div class="modal-label">スコア</div>
         <div class="modal-score" id="finalScoreEl">0</div>
-        <button onclick="restart()">もう一度プレイ</button>
+        <button id="modalRestartBtn">もう一度プレイ</button>
     </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-<script>
-'use strict';
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const { Engine, Bodies, Composite, Events, Runner } = Matter;
 
@@ -345,7 +356,7 @@ const FRUITS = [
 ];
 const SCORES = [1, 2, 4, 8, 12, 18, 24, 32, 40, 50, 62, 76];
 
-// ── Layout ─────────────────────────────────────────────────────────────────
+// ── Layout ───────────────────────────────────────────────────────────��─────
 const CW = 400, CH = 660;
 const WT = 15;
 const IL = WT;
@@ -354,32 +365,285 @@ const IB = 628;
 const DY = 100;
 const DRP = 62;
 
-// ── Canvas setup ───────────────────────────────────────────────────────────
-const cv = document.getElementById('mainCanvas');
-cv.width = CW; cv.height = CH;
-const cx = cv.getContext('2d');
+// ── 2D Overlay Canvas (for Pom, Bat, UI) ──────────────────────────────────
+const overlay = document.getElementById('overlay2d');
+const cx = overlay.getContext('2d');
 
+// ── Next fruit canvas ───────────────────────────────���─────────────────────
 const nv = document.getElementById('nextCanvas');
 const nx = nv.getContext('2d');
 
-// ── Pom state ──────────────────────────────────────────────────────────────
-const PR = 26; // Pom radius
-let pomBody = null;
-let pomEnabled = true;  // 表示/物理 ON/OFF
-let pomFacing  = 1;     // 1=右, -1=左
-let pomWalkF   = 0;     // アニメーションフレーム
-let pomJumpCd  = 180;   // ジャンプクールダウン
-let pomPushCd  = 0;     // 押し付けクールダウン
-let pomPushing = false; // 現在押し付け中か
+// ── Three.js Setup ────────────────────────────────────────────────────────
+const gameDiv = document.getElementById('game3d');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(400, 660);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+gameDiv.insertBefore(renderer.domElement, overlay);
 
-// ── Bat (クロ) state ────────────────────────────────────────────────────────
-const BR = 14;           // bat body radius
-const BAT_CRUISE_Y = 70; // cruising altitude (updated after DY is known)
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x080c14);
+
+// Camera — slight perspective looking at the game board
+// Game board: X=[15,385], Y_physics=[100,628] → Three.js Y=[32, 560] (inverted)
+// Camera: FOV calculated to exactly frame the 400×660 game board
+// Vertical FOV = 50°, distance = 710 → visible height ≈ 662, width ≈ 401
+const camera = new THREE.PerspectiveCamera(50, 400 / 660, 10, 2000);
+camera.position.set(200, 330, 720);
+camera.lookAt(200, 330, 0);
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0x404860, 0.8);
+scene.add(ambientLight);
+
+const mainLight = new THREE.DirectionalLight(0xffffff, 1.8);
+mainLight.position.set(150, 600, 400);
+mainLight.castShadow = true;
+mainLight.shadow.mapSize.set(1024, 1024);
+mainLight.shadow.camera.left = -250;
+mainLight.shadow.camera.right = 250;
+mainLight.shadow.camera.top = 400;
+mainLight.shadow.camera.bottom = -400;
+scene.add(mainLight);
+
+const fillLight = new THREE.DirectionalLight(0x4488ff, 0.4);
+fillLight.position.set(-200, 200, 300);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xff8844, 0.3);
+rimLight.position.set(100, -100, 200);
+scene.add(rimLight);
+
+// ── Container (3D walls) ──────────────────────────────────────────────────
+const wallMat = new THREE.MeshPhysicalMaterial({
+    color: 0x334455,
+    transparent: true,
+    opacity: 0.25,
+    roughness: 0.05,
+    metalness: 0.1,
+    transmission: 0.6,
+});
+const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x1a2030,
+    roughness: 0.8,
+    metalness: 0.3,
+});
+
+// Convert physics Y to Three.js Y
+function p2y(py) { return CH - py; }
+
+// Left wall
+const leftWallGeo = new THREE.BoxGeometry(WT, IB - DY + WT, 40);
+const leftWall = new THREE.Mesh(leftWallGeo, wallMat);
+leftWall.position.set(IL / 2, p2y((DY + IB) / 2), 0);
+scene.add(leftWall);
+
+// Right wall
+const rightWall = new THREE.Mesh(leftWallGeo, wallMat);
+rightWall.position.set(IR + WT / 2, p2y((DY + IB) / 2), 0);
+scene.add(rightWall);
+
+// Floor
+const floorGeo = new THREE.BoxGeometry(IR - IL + WT * 2, WT, 60);
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.position.set(CW / 2, p2y(IB + WT / 2), 0);
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Back wall (subtle)
+const backGeo = new THREE.BoxGeometry(IR - IL, IB - DY + WT, 4);
+const backMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
+const backWall = new THREE.Mesh(backGeo, backMat);
+backWall.position.set(CW / 2, p2y((DY + IB) / 2), -22);
+scene.add(backWall);
+
+// ── Load Fruit Models ─────────────────────────────────────────────────────
+const fruitModels = new Array(12).fill(null);
+let modelsLoaded = false;
+
+const loader = new GLTFLoader();
+loader.load('scene.glb', (gltf) => {
+    gltf.scene.traverse((child) => {
+        if (child.isMesh && child.parent && child.parent.name.startsWith('Fruit_')) {
+            const idx = parseInt(child.parent.name.split('_')[1]);
+            if (idx >= 0 && idx < 12) {
+                fruitModels[idx] = child.parent;
+            }
+        }
+    });
+    // Also check top-level objects
+    gltf.scene.children.forEach(child => {
+        if (child.name.startsWith('Fruit_')) {
+            const idx = parseInt(child.name.split('_')[1]);
+            if (idx >= 0 && idx < 12) {
+                fruitModels[idx] = child;
+            }
+        }
+    });
+    modelsLoaded = true;
+    console.log('Fruit models loaded:', fruitModels.map((m, i) => m ? `Fruit_${i}` : null).filter(Boolean));
+});
+
+function cloneFruitModel(type) {
+    const model = fruitModels[type];
+    if (!model) return createFallbackMesh(type);
+    const clone = model.clone(true);
+    clone.traverse(child => {
+        if (child.isMesh) {
+            child.material = child.material.clone();
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+    return clone;
+}
+
+function createFallbackMesh(type) {
+    const f = FRUITS[type];
+    const geo = new THREE.SphereGeometry(1, 16, 12);
+    const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(f.c),
+        roughness: 0.3,
+        metalness: 0.1,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    return mesh;
+}
+
+// ── Body → Mesh mapping ───────────────────────────────────────────────────
+const bodyMeshMap = new WeakMap();
+
+function addMeshForBody(body) {
+    const type = body.fruitType;
+    const r = FRUITS[type].r;
+    const mesh = cloneFruitModel(type);
+    // Scale: Blender models are ~1 unit radius, we need them at r pixels
+    mesh.scale.set(r * 0.9, r * 0.9, r * 0.9);
+    mesh.position.set(body.position.x, p2y(body.position.y), 0);
+    mesh.rotation.set(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        Math.random() * Math.PI
+    );
+    scene.add(mesh);
+    bodyMeshMap.set(body, mesh);
+}
+
+function removeMeshForBody(body) {
+    const mesh = bodyMeshMap.get(body);
+    if (mesh) {
+        scene.remove(mesh);
+        mesh.traverse(child => {
+            if (child.isMesh) {
+                child.geometry?.dispose();
+                child.material?.dispose();
+            }
+        });
+        bodyMeshMap.delete(body);
+    }
+}
+
+// ── 3D Particles ──────────────────────────────────────────────────────────
+const particleMeshes = [];
+const particleGeo = new THREE.SphereGeometry(1, 6, 4);
+
+function burst3D(x, y, color) {
+    const col = new THREE.Color(color);
+    for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const spd = 2 + Math.random() * 5;
+        const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1 });
+        const mesh = new THREE.Mesh(particleGeo, mat);
+        const size = 3 + Math.random() * 5;
+        mesh.scale.set(size, size, size);
+        mesh.position.set(x, p2y(y), Math.random() * 20 - 10);
+        scene.add(mesh);
+        particleMeshes.push({
+            mesh,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd + 2,
+            vz: (Math.random() - 0.5) * 3,
+            life: 1,
+        });
+    }
+}
+
+function updateParticles3D() {
+    for (let i = particleMeshes.length - 1; i >= 0; i--) {
+        const p = particleMeshes[i];
+        p.mesh.position.x += p.vx;
+        p.mesh.position.y += p.vy;
+        p.mesh.position.z += p.vz;
+        p.vy -= 0.18;
+        p.life -= 0.04;
+        p.mesh.material.opacity = p.life;
+        p.mesh.scale.multiplyScalar(0.97);
+        if (p.life <= 0) {
+            scene.remove(p.mesh);
+            p.mesh.material.dispose();
+            particleMeshes.splice(i, 1);
+        }
+    }
+}
+
+// ── Drop preview mesh ─────────────────────────────────────────────────────
+let dropPreviewMesh = null;
+let dropPreviewType = -1;
+
+function updateDropPreview(type, x) {
+    if (type !== dropPreviewType || !dropPreviewMesh) {
+        if (dropPreviewMesh) {
+            scene.remove(dropPreviewMesh);
+            dropPreviewMesh.traverse(c => { if (c.isMesh) { c.geometry?.dispose(); c.material?.dispose(); } });
+        }
+        dropPreviewMesh = cloneFruitModel(type);
+        const r = FRUITS[type].r;
+        dropPreviewMesh.scale.set(r * 0.9, r * 0.9, r * 0.9);
+        dropPreviewMesh.traverse(c => {
+            if (c.isMesh) {
+                c.material.transparent = true;
+                c.material.opacity = 0.75;
+            }
+        });
+        scene.add(dropPreviewMesh);
+        dropPreviewType = type;
+    }
+    const r = FRUITS[type].r;
+    const clampedX = Math.max(IL + r + 1, Math.min(IR - r - 1, x));
+    dropPreviewMesh.position.set(clampedX, p2y(DRP), 20);
+    dropPreviewMesh.rotation.y += 0.02;
+}
+
+function hideDropPreview() {
+    if (dropPreviewMesh) {
+        scene.remove(dropPreviewMesh);
+        dropPreviewMesh.traverse(c => { if (c.isMesh) { c.geometry?.dispose(); c.material?.dispose(); } });
+        dropPreviewMesh = null;
+        dropPreviewType = -1;
+    }
+}
+
+// ── Pom state ──────────────────────────────────────────────────────────────
+const PR = 26;
+let pomBody = null;
+let pomEnabled = true;
+let pomFacing = 1;
+let pomWalkF = 0;
+let pomJumpCd = 180;
+let pomPushCd = 0;
+let pomPushing = false;
+
+// ── Bat state ──────────────────────────────────────────────────────────────
+const BR = 14;
 let batX = 280, batY = 70;
 let batFacing = -1;
-let batWingF  = 0;
+let batWingF = 0;
 let batEnabled = true;
-let batState = 'cruising'; // cruising | diving | tapping | returning
+let batState = 'cruising';
 let batTargetFruit = null;
 let batTargetDestX = null;
 let batCd = 180;
@@ -388,7 +652,6 @@ let batCd = 180;
 let engine, world, runner, animId;
 let bodies = [];
 let merges = [];
-let particles = [];
 let curType, nxtType;
 let dropX = CW / 2;
 let canDrop = true;
@@ -410,7 +673,7 @@ function lighten(hex, a) {
     return `rgb(${Math.min(255, (n >> 16) + a)},${Math.min(255, ((n >> 8) & 0xff) + a)},${Math.min(255, (n & 0xff) + a)})`;
 }
 
-// ── Build sidebar fruit list ───────────────────────────────────────────────
+// ── Build sidebar fruit list ─────────────────────────────────��─────────────
 (function buildList() {
     const el = document.getElementById('fruitList');
     FRUITS.forEach((f, i) => {
@@ -444,14 +707,21 @@ function makeBody(x, y, type) {
 function init() {
     if (runner) Runner.stop(runner);
     if (animId) cancelAnimationFrame(animId);
-    bodies = []; merges = []; particles = [];
+
+    // Remove all 3D fruit meshes
+    bodies.forEach(b => removeMeshForBody(b));
+    particleMeshes.forEach(p => { scene.remove(p.mesh); p.mesh.material.dispose(); });
+    particleMeshes.length = 0;
+    hideDropPreview();
+
+    bodies = []; merges = [];
     score = 0; over = false; dangerMs = 0;
     canDrop = true; dropX = CW / 2;
     curType = pick(); nxtType = pick();
     lastT = 0;
 
     document.getElementById('scoreEl').textContent = 0;
-    document.getElementById('overlay').classList.remove('show');
+    document.getElementById('gameOverlay').classList.remove('show');
     if (aiMode) aiDropAt = performance.now() + 1200;
 
     engine = Engine.create({
@@ -461,13 +731,12 @@ function init() {
     });
     world = engine.world;
 
-    // 壁を分厚くしてトンネリング防止（見た目はWT=15のまま）
     const THICK = 120;
     const wo = { isStatic: true, friction: 0.5, restitution: 0.1, label: 'wall' };
     Composite.add(world, [
-        Bodies.rectangle(CW / 2,          IB + THICK / 2,       CW,     THICK,   wo),  // 床
-        Bodies.rectangle(IL - THICK / 2,  (DY + IB) / 2,        THICK,  IB - DY, wo),  // 左壁
-        Bodies.rectangle(IR + THICK / 2,  (DY + IB) / 2,        THICK,  IB - DY, wo),  // 右壁
+        Bodies.rectangle(CW / 2, IB + THICK / 2, CW, THICK, wo),
+        Bodies.rectangle(IL - THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
+        Bodies.rectangle(IR + THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
     ]);
 
     Events.on(engine, 'collisionStart', ev => {
@@ -503,6 +772,7 @@ function drop() {
     const b = makeBody(x, DRP, curType);
     bodies.push(b);
     Composite.add(world, b);
+    addMeshForBody(b);
     setTimeout(() => {
         if (!over) { curType = nxtType; nxtType = pick(); canDrop = true; }
     }, 550);
@@ -518,27 +788,23 @@ function doMerges() {
         const t = a.fruitType + 1;
         const mx = (a.position.x + b.position.x) / 2;
         const my = (a.position.y + b.position.y) / 2;
+
+        removeMeshForBody(a);
+        removeMeshForBody(b);
         Composite.remove(world, a);
         Composite.remove(world, b);
         bodies = bodies.filter(x => x !== a && x !== b);
         live.delete(a); live.delete(b);
+
         const nb = makeBody(mx, my, t);
         Composite.add(world, nb);
         bodies.push(nb);
         live.add(nb);
+        addMeshForBody(nb);
+
         score += SCORES[t];
         document.getElementById('scoreEl').textContent = score;
-        burst(mx, my, FRUITS[t].c);
-    }
-}
-
-// ── Particles ──────────────────────────────────────────────────────────────
-function burst(x, y, color) {
-    for (let i = 0; i < 12; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const s = 1.5 + Math.random() * 4;
-        particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 2,
-                         color, size: 3 + Math.random() * 5, life: 1 });
+        burst3D(mx, my, FRUITS[t].c);
     }
 }
 
@@ -558,12 +824,12 @@ function checkOver() {
 function gameOver() {
     over = true; canDrop = false;
     Runner.stop(runner);
+    hideDropPreview();
     document.getElementById('finalScoreEl').textContent = score;
-    document.getElementById('overlay').classList.add('show');
+    document.getElementById('gameOverlay').classList.add('show');
 }
 
 // ── Pom ────────────────────────────────────────────────────────────────────
-
 function togglePom() {
     pomEnabled = !pomEnabled;
     const btn = document.getElementById('pomBtn');
@@ -589,14 +855,13 @@ function initPom() {
     });
     Matter.Body.setInertia(pomBody, Infinity);
     Composite.add(world, pomBody);
-    pomFacing  = Math.random() > 0.5 ? 1 : -1;
-    pomWalkF   = 0;
-    pomJumpCd  = 200;
-    pomPushCd  = 0;
+    pomFacing = Math.random() > 0.5 ? 1 : -1;
+    pomWalkF = 0;
+    pomJumpCd = 200;
+    pomPushCd = 0;
     pomPushing = false;
 }
 
-// 合体させられる同種フルーツのペアを探す
 function findPomTarget() {
     let best = null, bestScore = -Infinity;
     for (let i = 0; i < bodies.length; i++) {
@@ -609,9 +874,7 @@ function findPomTarget() {
             const dy = a.position.y - b.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             const hDist = Math.abs(dx);
-            // 既に接触中・水平差が小さすぎ・遠すぎはスキップ
             if (dist < r * 2.4 || hDist < 10 || hDist > 220) continue;
-            // 大きいフルーツほど合体ボーナスが高い、距離が近いほどよい
             const sc = r * 2 - dist * 0.25;
             if (sc > bestScore) { bestScore = sc; best = { a, b }; }
         }
@@ -630,37 +893,31 @@ function updatePom() {
 
     if (target) {
         const { a, b } = target;
-        // ポムが近い方のフルーツを押す
-        const pusher   = Math.abs(pos.x - a.position.x) <= Math.abs(pos.x - b.position.x) ? a : b;
+        const pusher = Math.abs(pos.x - a.position.x) <= Math.abs(pos.x - b.position.x) ? a : b;
         const receiver = pusher === a ? b : a;
-        const pushDir  = Math.sign(receiver.position.x - pusher.position.x);
-        const r        = FRUITS[pusher.fruitType].r;
-        // 押す側と反対に立つ位置
-        const standX   = pusher.position.x - pushDir * (r + PR + 4);
+        const pushDir = Math.sign(receiver.position.x - pusher.position.x);
+        const r = FRUITS[pusher.fruitType].r;
+        const standX = pusher.position.x - pushDir * (r + PR + 4);
 
         pomFacing = pushDir;
         const distToStand = pos.x - standX;
 
         if (Math.abs(distToStand) > 20) {
-            // 定位置へ移動
             pomPushing = false;
             const spd = Math.abs(distToStand) > 60 ? 4.5 : 2.2;
             Matter.Body.setVelocity(pomBody, { x: -Math.sign(distToStand) * spd, y: vel.y });
         } else {
-            // 押し付け!
             pomPushing = true;
             Matter.Body.setVelocity(pomBody, { x: pushDir * 5.0, y: vel.y });
         }
-        // 障害物があればジャンプ
         pomJumpCd--;
         if (pomJumpCd <= 0 && Math.abs(vel.y) < 1) {
             Matter.Body.setVelocity(pomBody, { x: vel.x, y: -14 });
             pomJumpCd = 100 + Math.floor(Math.random() * 120);
         }
     } else {
-        // ターゲットなし — ゆっくりうろつく
         pomPushing = false;
-        if (pos.x < IL + PR + 6)      pomFacing = 1;
+        if (pos.x < IL + PR + 6) pomFacing = 1;
         else if (pos.x > IR - PR - 6) pomFacing = -1;
         else if (Math.random() < 0.006) pomFacing *= -1;
 
@@ -679,30 +936,27 @@ function updatePom() {
 function drawPom() {
     if (!pomBody) return;
     const { x, y } = pomBody.position;
-    const fb  = Math.sin(pomWalkF * 0.18) * (pomPushing ? 7 : 3.5);
-    const es  = pomFacing * PR * 0.04;
-    const ey  = pomPushing ? -PR * 0.18 : -PR * 0.08;
-    const eyH = pomPushing ? PR * 0.09  : PR * 0.15;
+    const fb = Math.sin(pomWalkF * 0.18) * (pomPushing ? 7 : 3.5);
+    const es = pomFacing * PR * 0.04;
+    const ey = pomPushing ? -PR * 0.18 : -PR * 0.08;
+    const eyH = pomPushing ? PR * 0.09 : PR * 0.15;
 
     cx.save();
     cx.translate(x, y);
 
-    // 影
     cx.fillStyle = 'rgba(0,0,0,0.18)';
     cx.beginPath();
     cx.ellipse(0, PR * 0.85, PR * 0.7, PR * 0.16, 0, 0, Math.PI * 2);
     cx.fill();
 
-    // 体（黄色みがかったピンク = 親切な印象）
-    const g = cx.createRadialGradient(-PR*.28, -PR*.28, PR*.06, 0, 0, PR);
-    g.addColorStop(0,   '#fff4c2');
+    const g = cx.createRadialGradient(-PR * .28, -PR * .28, PR * .06, 0, 0, PR);
+    g.addColorStop(0, '#fff4c2');
     g.addColorStop(0.5, '#ffd166');
-    g.addColorStop(1,   '#e8a020');
+    g.addColorStop(1, '#e8a020');
     cx.beginPath(); cx.arc(0, 0, PR, 0, Math.PI * 2);
     cx.fillStyle = g; cx.fill();
     cx.strokeStyle = '#c07010'; cx.lineWidth = 1.5; cx.stroke();
 
-    // ほっぺ
     cx.fillStyle = 'rgba(255,130,30,0.28)';
     for (const sx of [-1, 1]) {
         cx.beginPath();
@@ -710,7 +964,6 @@ function drawPom() {
         cx.fill();
     }
 
-    // 目（押し中は弧目ハート目）
     for (const sx of [-1, 1]) {
         cx.fillStyle = '#2a1000';
         cx.beginPath();
@@ -722,7 +975,6 @@ function drawPom() {
         cx.fill();
     }
 
-    // 口（押し中はにっこり大きめ、通常は小さいスマイル）
     cx.strokeStyle = '#7a3800'; cx.lineWidth = 1.8;
     cx.beginPath();
     if (pomPushing) {
@@ -732,7 +984,6 @@ function drawPom() {
     }
     cx.stroke();
 
-    // 足（アニメーション）
     cx.fillStyle = pomPushing ? '#ffaa00' : '#e8a020';
     for (const [sx, sign] of [[-1, 1], [1, -1]]) {
         cx.beginPath();
@@ -744,14 +995,12 @@ function drawPom() {
         cx.fill();
     }
 
-    // 押し中の腕（前に伸ばす）
     if (pomPushing) {
         cx.fillStyle = '#ffd166';
         cx.beginPath();
         cx.ellipse(pomFacing * PR * 0.9, PR * 0.08, PR * 0.18, PR * 0.13,
-                   pomFacing * 0.55, 0, Math.PI * 2);
+            pomFacing * 0.55, 0, Math.PI * 2);
         cx.fill();
-        // ハートマーク（お助け中）
         cx.fillStyle = 'rgba(255,80,120,0.85)';
         cx.font = `${PR * 0.7}px serif`;
         cx.textAlign = 'center';
@@ -762,8 +1011,7 @@ function drawPom() {
     cx.restore();
 }
 
-// ── Bat (クロ) ──────────────────────────────────────────────────────────────
-
+// ── Bat ────────────────────────────────────────────────────────────────────
 function toggleBat() {
     batEnabled = !batEnabled;
     const btn = document.getElementById('batBtn');
@@ -779,7 +1027,6 @@ function initBat() {
     batCd = 180;
 }
 
-// 高い位置にある同種ペアを探す（緊急度の高い合体が優先）
 function findBatTarget() {
     let best = null, bestScore = -Infinity;
     for (let i = 0; i < bodies.length; i++) {
@@ -787,14 +1034,12 @@ function findBatTarget() {
             const a = bodies[i], b = bodies[j];
             if (a.fruitType !== b.fruitType) continue;
             if (a.fruitType >= FRUITS.length - 1) continue;
-            const r  = FRUITS[a.fruitType].r;
+            const r = FRUITS[a.fruitType].r;
             const dx = Math.abs(a.position.x - b.position.x);
             if (dx < 40 || dx > 280) continue;
-            // 高い方のフルーツを掴み対象にする
             const topFruit = a.position.y <= b.position.y ? a : b;
             const topY = topFruit.position.y - r;
-            if (topY > IB - 120) continue; // 底付近は届かない
-            // 危険ゾーンに近いほど緊急度アップ
+            if (topY > IB - 120) continue;
             const urgency = Math.max(0, DY + 250 - topFruit.position.y) * 0.6;
             const sc = r + urgency - dx * 0.1;
             if (sc > bestScore) {
@@ -826,19 +1071,17 @@ function updateBat() {
                 batFacing = t.destX > t.fruit.position.x ? 1 : -1;
             } else { batCd = 40; }
         }
-
     } else if (batState === 'diving') {
         if (!batTargetFruit || !bodies.includes(batTargetFruit)) {
             batState = 'returning'; batCd = 60; return;
         }
-        const r  = FRUITS[batTargetFruit.fruitType].r;
+        const r = FRUITS[batTargetFruit.fruitType].r;
         const tx = batTargetFruit.position.x;
         const ty = batTargetFruit.position.y - r - 10;
         batX += (tx - batX) * 0.14;
         batY += (ty - batY) * 0.14;
         batFacing = Math.sign(batTargetDestX - tx);
         if (Math.abs(batX - tx) < 14 && Math.abs(batY - ty) < 14) {
-            // 弾き飛ばし!
             const pushDir = Math.sign(batTargetDestX - tx);
             Matter.Body.setVelocity(batTargetFruit, {
                 x: pushDir * 8,
@@ -846,13 +1089,11 @@ function updateBat() {
             });
             batState = 'tapping'; batCd = 18;
         }
-
     } else if (batState === 'tapping') {
         if (batCd <= 0) {
             batTargetFruit = null; batTargetDestX = null;
             batState = 'returning'; batCd = 220;
         }
-
     } else if (batState === 'returning') {
         batX += batFacing * 3.5;
         batY += (cruiseY - batY) * 0.12;
@@ -863,22 +1104,20 @@ function updateBat() {
 function drawBat() {
     if (!batEnabled) return;
     const wf = batWingF * 0.25;
-    const wingY  = Math.sin(wf) * 20;
-    const isTap  = batState === 'tapping';
+    const wingY = Math.sin(wf) * 20;
+    const isTap = batState === 'tapping';
 
     cx.save();
     cx.translate(batX, batY);
     if (batFacing < 0) cx.scale(-1, 1);
 
-    // 翼（左右対称に描いてから scale で反転）
     cx.fillStyle = isTap ? '#6030c0' : '#1e0d3a';
     for (const sx of [-1, 1]) {
         cx.beginPath();
         cx.moveTo(sx * 4, 0);
         cx.quadraticCurveTo(sx * 22, -wingY, sx * 38, wingY * 0.4);
-        cx.quadraticCurveTo(sx * 24,  10,    sx * 4,   8);
+        cx.quadraticCurveTo(sx * 24, 10, sx * 4, 8);
         cx.fill();
-        // 翼先の小さな切れ込み
         cx.fillStyle = '#0d1117';
         cx.beginPath();
         cx.moveTo(sx * 30, wingY * 0.2);
@@ -888,27 +1127,24 @@ function drawBat() {
         cx.fillStyle = isTap ? '#6030c0' : '#1e0d3a';
     }
 
-    // 体
     const bg = cx.createRadialGradient(-BR * 0.3, -BR * 0.3, BR * 0.05, 0, 0, BR);
-    bg.addColorStop(0,   '#7040c0');
+    bg.addColorStop(0, '#7040c0');
     bg.addColorStop(0.6, '#2a1060');
-    bg.addColorStop(1,   '#0d0520');
+    bg.addColorStop(1, '#0d0520');
     cx.beginPath();
     cx.ellipse(0, 1, BR * 0.65, BR * 0.85, 0, 0, Math.PI * 2);
     cx.fillStyle = bg; cx.fill();
     cx.strokeStyle = '#5020a0'; cx.lineWidth = 1; cx.stroke();
 
-    // 耳
     cx.fillStyle = '#150830';
     for (const sx of [-1, 1]) {
         cx.beginPath();
-        cx.moveTo(sx * 5,  -BR * 0.55);
+        cx.moveTo(sx * 5, -BR * 0.55);
         cx.lineTo(sx * BR * 0.68, -BR * 1.35);
-        cx.lineTo(sx * 2,  -BR * 0.82);
+        cx.lineTo(sx * 2, -BR * 0.82);
         cx.fill();
     }
 
-    // 目（赤いグロー）
     for (const sx of [-1, 1]) {
         cx.fillStyle = 'rgba(255,40,40,0.22)';
         cx.beginPath();
@@ -920,7 +1156,6 @@ function drawBat() {
         cx.fill();
     }
 
-    // 牙
     cx.fillStyle = '#f0e8ff';
     for (const sx of [-1, 1]) {
         cx.beginPath();
@@ -932,7 +1167,6 @@ function drawBat() {
 
     cx.restore();
 
-    // ターゲットへの照準線（急降下中）
     if (batState === 'diving' && batTargetFruit && bodies.includes(batTargetFruit)) {
         cx.save();
         cx.strokeStyle = 'rgba(160,60,255,0.4)';
@@ -946,7 +1180,6 @@ function drawBat() {
         cx.restore();
     }
 
-    // 弾き飛ばし時のフラッシュ
     if (isTap) {
         cx.save();
         cx.fillStyle = 'rgba(200,100,255,0.55)';
@@ -957,7 +1190,7 @@ function drawBat() {
     }
 }
 
-// ── Drawing ────────────────────────────────────────────────────────────────
+// ── 2D fruit drawing (for next canvas, RL previews) ───────────────────────
 function drawFruit(c, x, y, type, alpha) {
     const f = FRUITS[type];
     c.save();
@@ -983,20 +1216,16 @@ function drawFruit(c, x, y, type, alpha) {
     c.lineWidth = 2;
     c.stroke();
 
-    // いくら専用：卵の膜と光沢点
     if (f.shine) {
-        // 半透明の膜
         c.beginPath();
         c.arc(x, y, f.r * .85, 0, Math.PI * 2);
         c.strokeStyle = 'rgba(255,180,100,0.45)';
         c.lineWidth = 1.5;
         c.stroke();
-        // 大きな光沢
         c.beginPath();
         c.arc(x - f.r * .22, y - f.r * .22, f.r * .32, 0, Math.PI * 2);
         c.fillStyle = 'rgba(255,255,255,0.55)';
         c.fill();
-        // 小さな副光沢
         c.beginPath();
         c.arc(x + f.r * .2, y + f.r * .15, f.r * .12, 0, Math.PI * 2);
         c.fillStyle = 'rgba(255,255,255,0.3)';
@@ -1020,56 +1249,48 @@ function drawFruit(c, x, y, type, alpha) {
     c.restore();
 }
 
+// ── Render (3D + 2D overlay) ─────────────────────────────────���────────────
 function render() {
-    cx.fillStyle = '#0d1117';
-    cx.fillRect(0, 0, CW, CH);
-
-    cx.fillStyle = '#111827';
-    cx.fillRect(IL, DY, IR - IL, IB - DY);
-
-    // Danger indicator when approaching game over
-    if (dangerMs > 800) {
-        const alpha = Math.min(0.35, (dangerMs - 800) / 3000);
-        cx.fillStyle = `rgba(239,68,68,${alpha})`;
-        cx.fillRect(IL, DY, IR - IL, IB - DY);
-    }
-
-    // Draw particles + fruits clipped to container width
-    cx.save();
-    cx.beginPath();
-    cx.rect(IL, 0, IR - IL, IB);
-    cx.clip();
-
-    for (const p of particles) {
-        cx.save();
-        cx.globalAlpha = p.life * 0.8;
-        cx.fillStyle = p.color;
-        cx.beginPath();
-        cx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-        cx.fill();
-        cx.restore();
-    }
-
+    // Update 3D mesh positions from physics
     for (const b of bodies) {
-        drawFruit(cx, b.position.x, b.position.y, b.fruitType);
+        const mesh = bodyMeshMap.get(b);
+        if (mesh) {
+            mesh.position.x = b.position.x;
+            mesh.position.y = p2y(b.position.y);
+            mesh.position.z = 0;
+            // Gentle rotation for life
+            mesh.rotation.y += 0.008;
+            mesh.rotation.x += 0.003;
+        }
     }
-    drawPom();
-    drawBat();
-    cx.restore();
 
-    // Walls drawn on top to visually clip fruits at edges
-    cx.fillStyle = '#1f2937';
-    cx.fillRect(0, 0, WT, IB + WT);
-    cx.fillRect(IR, 0, WT, IB + WT);
-    cx.fillRect(0, IB, CW, WT);
+    // Update drop preview
+    if (canDrop && !over) {
+        updateDropPreview(curType, dropX);
+    } else {
+        hideDropPreview();
+    }
 
-    cx.fillStyle = '#374151';
-    cx.fillRect(WT - 2, DY, 2, IB - DY);
-    cx.fillRect(IR, DY, 2, IB - DY);
+    // Update 3D particles
+    updateParticles3D();
 
-    cx.strokeStyle = '#4b5563';
-    cx.lineWidth = 1;
-    cx.strokeRect(IL - 0.5, DY - 0.5, IR - IL + 1, IB - DY + WT);
+    // Danger flash on walls
+    if (dangerMs > 800) {
+        const intensity = Math.min(1, (dangerMs - 800) / 2000);
+        leftWall.material.emissive = new THREE.Color(0xff0000);
+        leftWall.material.emissiveIntensity = intensity * 0.3;
+        rightWall.material.emissive = new THREE.Color(0xff0000);
+        rightWall.material.emissiveIntensity = intensity * 0.3;
+    } else {
+        leftWall.material.emissiveIntensity = 0;
+        rightWall.material.emissiveIntensity = 0;
+    }
+
+    // Render Three.js scene
+    renderer.render(scene, camera);
+
+    // 2D Overlay
+    cx.clearRect(0, 0, CW, CH);
 
     // Danger line
     cx.save();
@@ -1085,11 +1306,10 @@ function render() {
     cx.setLineDash([]);
     cx.restore();
 
-    // Drop guide + current fruit
+    // Drop guide
     if (canDrop && !over) {
         const r = FRUITS[curType].r;
         const x = Math.max(IL + r + 1, Math.min(IR - r - 1, dropX));
-
         cx.save();
         cx.strokeStyle = 'rgba(255,255,255,0.12)';
         cx.lineWidth = 1;
@@ -1100,9 +1320,11 @@ function render() {
         cx.stroke();
         cx.setLineDash([]);
         cx.restore();
-
-        drawFruit(cx, x, DRP, curType, 0.88);
     }
+
+    // Draw Pom and Bat on overlay
+    drawPom();
+    drawBat();
 }
 
 function renderNext() {
@@ -1120,14 +1342,6 @@ function loop(ts) {
     updatePom();
     updateBat();
 
-    particles = particles.filter(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.18;
-        p.life -= 0.04;
-        return p.life > 0;
-    });
-
     checkOver();
     render();
     renderNext();
@@ -1136,24 +1350,25 @@ function loop(ts) {
 }
 
 // ── Input ──────────────────────────────────────────────────────────────────
-cv.addEventListener('mousemove', e => {
+const gameEl = document.getElementById('game3d');
+gameEl.addEventListener('mousemove', e => {
     if (aiMode) return;
-    const r = cv.getBoundingClientRect();
+    const r = gameEl.getBoundingClientRect();
     dropX = (e.clientX - r.left) * (CW / r.width);
 });
-cv.addEventListener('click', () => { if (!aiMode) drop(); });
+gameEl.addEventListener('click', () => { if (!aiMode) drop(); });
 
-cv.addEventListener('touchmove', e => {
+gameEl.addEventListener('touchmove', e => {
     e.preventDefault();
     if (aiMode) return;
-    const r = cv.getBoundingClientRect();
+    const r = gameEl.getBoundingClientRect();
     dropX = (e.touches[0].clientX - r.left) * (CW / r.width);
 }, { passive: false });
 
-cv.addEventListener('touchstart', e => {
+gameEl.addEventListener('touchstart', e => {
     e.preventDefault();
     if (aiMode) return;
-    const r = cv.getBoundingClientRect();
+    const r = gameEl.getBoundingClientRect();
     dropX = (e.touches[0].clientX - r.left) * (CW / r.width);
     drop();
 }, { passive: false });
@@ -1182,43 +1397,35 @@ function aiThink() {
         const s = aiEval(tx);
         if (s > bestScore) { bestScore = s; bestX = tx; }
     }
-    // 少しランダムなブレを加えて人間らしく
     bestX += (Math.random() - 0.5) * 14;
     return Math.max(IL + curR + 4, Math.min(IR - curR - 4, bestX));
 }
 
 // ── Genome-based position scorer ───────────────────────────────────────────
-// ゲノム [g0..g4] = 5つの特徴量に対する重み
-// g0: 合体ボーナス  g1: スタック高ペナルティ  g2: 危険ゾーンペナルティ
-// g3: エッジペナルティ  g4: 中央寄せ
-let aiGenome = [1, 1, 1, 1, 1]; // デフォルト = 従来のヒューリスティックと同等
+let aiGenome = [1, 1, 1, 1, 1];
 
 function scorePos(tx, bods, curT, genome) {
     const [g0, g1, g2, g3, g4] = genome;
     const curR = FRUITS[curT].r;
     let score = 0;
-    let colTopY = IB; // track top of highest fruit in the target column
+    let colTopY = IB;
 
     for (const b of bods) {
         const br = FRUITS[b.fruitType].r;
         const dx = Math.abs(b.position.x - tx);
 
-        // merge bonus
         if (b.fruitType === curT && dx < (curR + br) * 1.4) {
             score += g0 * (200 - dx * 1.5);
         }
-        // column height: wider window so piling is detected before fruits are touching
         if (dx < curR + br + 20) {
             const top = b.position.y - br;
             if (top < colTopY) colTopY = top;
         }
-        // danger zone penalty (narrow — only for fruit directly below drop)
         if (dx < curR + br) {
             score -= g2 * Math.max(0, DY + 150 - b.position.y) * 0.8;
         }
     }
 
-    // g1 penalises how tall the column at tx already is
     score -= g1 * (IB - colTopY) * 0.6;
 
     const margin = Math.min(tx - IL, IR - tx);
@@ -1233,10 +1440,7 @@ function aiEval(tx) {
 
 function aiUpdate(ts) {
     if (!aiMode || over) return;
-
-    // カーソルをターゲットへスムーズに移動
     dropX += (aiTargetX - dropX) * 0.1;
-
     if (canDrop && ts >= aiDropAt) {
         dropX = aiTargetX;
         drop();
@@ -1259,13 +1463,13 @@ function simGame(genome) {
     const THICK = 120;
     const wo = { isStatic: true, friction: 0.5, restitution: 0.1, label: 'wall' };
     Composite.add(wld, [
-        Bodies.rectangle(CW / 2,      IB + THICK / 2,  CW,    THICK,   wo),
-        Bodies.rectangle(IL - THICK / 2, (DY+IB)/2,   THICK, IB - DY, wo),
-        Bodies.rectangle(IR + THICK / 2, (DY+IB)/2,   THICK, IB - DY, wo),
+        Bodies.rectangle(CW / 2, IB + THICK / 2, CW, THICK, wo),
+        Bodies.rectangle(IL - THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
+        Bodies.rectangle(IR + THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
     ]);
 
     let bods = [], pending = [], sc = 0;
-    let drops = 0, merges = 0, sumX = 0; // behavioral descriptors for MAP-Elites
+    let drops = 0, merges = 0, sumX = 0;
 
     Events.on(eng, 'collisionStart', ev => {
         for (const { bodyA: a, bodyB: b } of ev.pairs) {
@@ -1323,22 +1527,21 @@ function simGame(genome) {
 
     Events.off(eng, 'collisionStart');
     Events.off(eng, 'afterUpdate');
-    const xBias    = drops > 0 ? sumX / drops : CW / 2;
+    const xBias = drops > 0 ? sumX / drops : CW / 2;
     const mergeRate = drops > 0 ? merges / drops : 0;
     return { score: sc, xBias, mergeRate };
 }
 
-// ── 並列シミュレーション用 (全個体観戦) ────────────────────────────────────
-
+// ── Parallel sim for watch mode ────────────────────────────────────────────
 function createSimCtx(genome) {
     const eng = Engine.create({ gravity: { y: 2.5 }, positionIterations: 8, velocityIterations: 6 });
     const wld = eng.world;
     const THICK = 120;
     const wo = { isStatic: true, friction: 0.5, restitution: 0.1, label: 'wall' };
     Composite.add(wld, [
-        Bodies.rectangle(CW/2,       IB+THICK/2,    CW,    THICK,   wo),
-        Bodies.rectangle(IL-THICK/2, (DY+IB)/2,     THICK, IB-DY,   wo),
-        Bodies.rectangle(IR+THICK/2, (DY+IB)/2,     THICK, IB-DY,   wo),
+        Bodies.rectangle(CW / 2, IB + THICK / 2, CW, THICK, wo),
+        Bodies.rectangle(IL - THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
+        Bodies.rectangle(IR + THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
     ]);
     const sim = {
         eng, wld, genome,
@@ -1399,14 +1602,13 @@ function drawMultiGrid(canvas, sims) {
     const ctx = canvas.getContext('2d');
     const CW2 = canvas.width, CH2 = canvas.height;
     const COLS = 4, ROWS = 4, GAP = 3;
-    const cW = (CW2 - (COLS - 1) * GAP) / COLS;   // ≈ 47px
-    const cH = (CH2 - (ROWS - 1) * GAP) / ROWS;   // ≈ 68px
+    const cW = (CW2 - (COLS - 1) * GAP) / COLS;
+    const cH = (CH2 - (ROWS - 1) * GAP) / ROWS;
     const scale = cW / (IR - IL);
 
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, CW2, CH2);
 
-    // スコア順で並び替えて表示（高スコアが左上）
     const order = Array.from({ length: sims.length }, (_, i) => i)
         .sort((a, b) => sims[b].score - sims[a].score);
 
@@ -1423,43 +1625,37 @@ function drawMultiGrid(canvas, sims) {
         ctx.translate(ox - IL * scale, oy - DY * scale);
         ctx.scale(scale, scale);
 
-        // 危険ライン
         ctx.strokeStyle = 'rgba(239,68,68,0.3)';
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(IL, DY); ctx.lineTo(IR, DY); ctx.stroke();
 
-        // フルーツ描画（軽量版: グラデなし）
         for (const b of sim.bods) {
             const f = FRUITS[b.fruitType];
             ctx.beginPath(); ctx.arc(b.position.x, b.position.y, f.r, 0, Math.PI * 2);
             ctx.fillStyle = f.c; ctx.fill();
-            ctx.beginPath(); ctx.arc(b.position.x - f.r*.25, b.position.y - f.r*.25, f.r*.22, 0, Math.PI*2);
+            ctx.beginPath(); ctx.arc(b.position.x - f.r * .25, b.position.y - f.r * .25, f.r * .22, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fill();
         }
 
         ctx.restore();
 
-        // スコア表示
         ctx.fillStyle = 'rgba(0,0,0,0.65)';
         ctx.fillRect(ox, oy, cW, 11);
         ctx.fillStyle = sim.dead ? '#f87171' : '#94a3b8';
         ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
         ctx.fillText(sim.score, ox + 2, oy + 1);
 
-        // エリートマーカー（上位4個体は紫点）
         if (di < 4) {
             ctx.fillStyle = '#a78bfa';
             ctx.fillRect(ox + cW - 5, oy, 5, 5);
         }
 
-        // ゲームオーバーの赤いオーバーレイ
         if (sim.dead) {
             ctx.fillStyle = 'rgba(220,38,38,0.12)';
             ctx.fillRect(ox, oy, cW, cH);
         }
     });
 
-    // 生存数インジケーター
     const alive = sims.filter(s => !s.dead).length;
     ctx.fillStyle = '#1f2937'; ctx.fillRect(0, CH2 - 12, CW2, 12);
     ctx.fillStyle = '#94a3b8'; ctx.font = '8px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
@@ -1470,8 +1666,8 @@ function drawMultiGrid(canvas, sims) {
 
 async function runGenerationVisualized(genomes) {
     const canvas = document.getElementById('rl-view');
-    const sims   = genomes.map(g => createSimCtx(g));
-    const MAX_STEPS = 2000, SPF = 2; // steps per frame
+    const sims = genomes.map(g => createSimCtx(g));
+    const MAX_STEPS = 2000, SPF = 2;
 
     for (let step = 0; step < MAX_STEPS && RL.watchMode; step++) {
         for (const s of sims) stepSim(s);
@@ -1492,7 +1688,7 @@ async function runGenerationVisualized(genomes) {
     return sims.map(s => s.score);
 }
 
-// ── 学習曲線 ───────────────────────────────────────────────────────────────
+// ── Learning history chart ─────────────────────────────────────────────────
 let genHistory = [];
 
 function drawHistoryChart() {
@@ -1511,15 +1707,14 @@ function drawHistoryChart() {
         return;
     }
 
-    const maxS  = Math.max(...genHistory.map(h => h.best), 1);
-    const maxG  = genHistory[genHistory.length - 1].gen || 1;
+    const maxS = Math.max(...genHistory.map(h => h.best), 1);
+    const maxG = genHistory[genHistory.length - 1].gen || 1;
     const PAD_L = 28, PAD_B = 14, PAD_T = 4;
     const gW = W - PAD_L - 4, gH = H - PAD_B - PAD_T;
 
-    const toX = g  => PAD_L + (g  / maxG) * gW;
-    const toY = s  => PAD_T + gH - (s / maxS) * gH;
+    const toX = g => PAD_L + (g / maxG) * gW;
+    const toY = s => PAD_T + gH - (s / maxS) * gH;
 
-    // グリッド
     ct.strokeStyle = '#1f2937'; ct.lineWidth = 1;
     [0, 0.25, 0.5, 0.75, 1].forEach(r => {
         const y = toY(maxS * r);
@@ -1529,7 +1724,6 @@ function drawHistoryChart() {
         ct.fillText(Math.round(maxS * r), PAD_L - 2, y);
     });
 
-    // 平均ライン (紫)
     ct.strokeStyle = '#7c3aed'; ct.lineWidth = 1.5;
     ct.beginPath();
     genHistory.forEach((h, i) => {
@@ -1538,7 +1732,6 @@ function drawHistoryChart() {
     });
     ct.stroke();
 
-    // 最高スコアライン (金)
     ct.strokeStyle = '#f59e0b'; ct.lineWidth = 2;
     ct.beginPath();
     genHistory.forEach((h, i) => {
@@ -1547,14 +1740,13 @@ function drawHistoryChart() {
     });
     ct.stroke();
 
-    // 最新点
     const last = genHistory[genHistory.length - 1];
     ct.fillStyle = '#f59e0b';
     ct.beginPath(); ct.arc(toX(last.gen), toY(last.best), 3, 0, Math.PI * 2); ct.fill();
 }
 
-// ── プレビューシミュレーション ─────────────────────────────────────────────
-const PREV_SCALE = 200 / (IR - IL); // 200px / 370px ≈ 0.541
+// ── Preview simulation ─────────────────────────────────────────────────────
+const PREV_SCALE = 200 / (IR - IL);
 
 function renderPreview(ctx, bods, curT, dropX, sc) {
     const PW = 200, PH = 285;
@@ -1568,7 +1760,6 @@ function renderPreview(ctx, bods, curT, dropX, sc) {
     ctx.fillStyle = '#111827';
     ctx.fillRect(IL, DY, IR - IL, IB - DY);
 
-    // 危険ライン
     ctx.strokeStyle = 'rgba(239,68,68,0.4)'; ctx.lineWidth = 2;
     ctx.setLineDash([5, 4]);
     ctx.beginPath(); ctx.moveTo(IL, DY); ctx.lineTo(IR, DY); ctx.stroke();
@@ -1576,14 +1767,12 @@ function renderPreview(ctx, bods, curT, dropX, sc) {
 
     for (const b of bods) drawFruit(ctx, b.position.x, b.position.y, b.fruitType);
 
-    // ドロップ中フルーツ
     const r = FRUITS[curT].r;
     const dx = Math.max(IL + r + 1, Math.min(IR - r - 1, dropX));
     drawFruit(ctx, dx, DRP, curT, 0.75);
 
     ctx.restore();
 
-    // スコア表示
     ctx.fillStyle = '#f59e0b';
     ctx.font = 'bold 11px Arial';
     ctx.textAlign = 'left';
@@ -1600,9 +1789,9 @@ async function simGameVisible(genome) {
     const THICK = 120;
     const wo = { isStatic: true, friction: 0.5, restitution: 0.1, label: 'wall' };
     Composite.add(wld, [
-        Bodies.rectangle(CW / 2,       IB + THICK / 2,  CW,    THICK,   wo),
-        Bodies.rectangle(IL - THICK/2, (DY+IB)/2,        THICK, IB - DY, wo),
-        Bodies.rectangle(IR + THICK/2, (DY+IB)/2,        THICK, IB - DY, wo),
+        Bodies.rectangle(CW / 2, IB + THICK / 2, CW, THICK, wo),
+        Bodies.rectangle(IL - THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
+        Bodies.rectangle(IR + THICK / 2, (DY + IB) / 2, THICK, IB - DY, wo),
     ]);
 
     let bods = [], pending = [], sc = 0;
@@ -1636,8 +1825,8 @@ async function simGameVisible(genome) {
 
     let curT = pick(), nxtT = pick(), cd = 0, dangerCt = 0, dead = false;
     let previewDropX = CW / 2;
-    const STEPS_PER_FRAME = 8;   // 8倍速
-    const MAX_FRAMES      = 360; // 最大6秒
+    const STEPS_PER_FRAME = 8;
+    const MAX_FRAMES = 360;
 
     document.getElementById('rl-view-info').textContent = '再生中…';
 
@@ -1681,8 +1870,8 @@ const RL = {
     pop: [], gen: 0, bestScore: 0, bestW: null, running: false,
     previewOn: false, watchMode: false,
 
-    randW()     { return Array.from({ length: 5 }, () => Math.random() * 4 - 0.5); },
-    mutate(w)   { return w.map(v => Math.random() < this.MUT_RATE ? v + (Math.random() - 0.5) * 2 * this.MUT_SCALE : v); },
+    randW() { return Array.from({ length: 5 }, () => Math.random() * 4 - 0.5); },
+    mutate(w) { return w.map(v => Math.random() < this.MUT_RATE ? v + (Math.random() - 0.5) * 2 * this.MUT_SCALE : v); },
     cross(a, b) { return a.map((v, i) => Math.random() < 0.5 ? v : b[i]); },
 
     init() {
@@ -1708,13 +1897,11 @@ const RL = {
             this.MUT_SCALE = +document.getElementById('rl-speed').value * 0.1;
 
             if (this.watchMode) {
-                // 全個体をリアルタイム描画しながら評価
                 const scores = await runGenerationVisualized(this.pop.map(p => p.w));
                 if (!this.running) break;
                 this.pop.forEach((p, i) => { p.score = scores[i] || 0; });
                 this.drawChart();
             } else {
-                // ヘッドレス: 1個体ずつ高速評価
                 for (let i = 0; i < this.pop.length; i++) {
                     if (!this.running) break;
                     this.pop[i].score = simGame(this.pop[i].w);
@@ -1722,7 +1909,6 @@ const RL = {
                     await new Promise(r => setTimeout(r, 0));
                 }
                 if (!this.running) break;
-                // 単体プレビュー
                 if (this.previewOn && this.bestW) await simGameVisible(this.bestW);
             }
             if (!this.running) break;
@@ -1760,7 +1946,7 @@ const RL = {
 
     togglePreview() {
         this.previewOn = !this.previewOn;
-        if (this.previewOn && this.watchMode) this.toggleWatch(); // 排他
+        if (this.previewOn && this.watchMode) this.toggleWatch();
         const btn = document.getElementById('rl-prev-btn');
         btn.textContent = this.previewOn ? '👁 単体: ON' : '👁 単体';
         btn.classList.toggle('on', this.previewOn);
@@ -1769,7 +1955,7 @@ const RL = {
 
     toggleWatch() {
         this.watchMode = !this.watchMode;
-        if (this.watchMode && this.previewOn) this.togglePreview(); // 排他
+        if (this.watchMode && this.previewOn) this.togglePreview();
         const btn = document.getElementById('rl-watch-btn');
         btn.textContent = this.watchMode ? '🎮 全体: ON' : '🎮 全体';
         btn.classList.toggle('on', this.watchMode);
@@ -1803,10 +1989,10 @@ const RL = {
     },
 
     updateUI() {
-        document.getElementById('rl-gen').textContent  = this.gen;
+        document.getElementById('rl-gen').textContent = this.gen;
         document.getElementById('rl-best').textContent = this.bestScore || '-';
         const top = this.pop.find(p => p.score > 0);
-        document.getElementById('rl-cur').textContent  = top ? Math.round(top.score) : '-';
+        document.getElementById('rl-cur').textContent = top ? Math.round(top.score) : '-';
         if (this.bestW) {
             document.getElementById('rl-genome').textContent =
                 '重み: [' + this.bestW.map(v => v.toFixed(3)).join(', ') + ']\n' +
@@ -1817,13 +2003,13 @@ const RL = {
     },
 
     drawChart() {
-        const c  = document.getElementById('rl-chart');
+        const c = document.getElementById('rl-chart');
         const ct = c.getContext('2d');
         ct.fillStyle = '#0d1117'; ct.fillRect(0, 0, c.width, c.height);
 
         const scores = this.pop.map(p => p.score);
-        const maxS   = Math.max(...scores, this.bestScore, 1);
-        const bw     = c.width / this.pop.length;
+        const maxS = Math.max(...scores, this.bestScore, 1);
+        const bw = c.width / this.pop.length;
 
         scores.forEach((s, i) => {
             const h = (s / maxS) * (c.height - 4) + 2;
@@ -1841,6 +2027,18 @@ const RL = {
     },
 };
 
+// ── Wire up buttons ───────────────────────────────────────────────────────
+document.getElementById('restartBtn').addEventListener('click', restart);
+document.getElementById('modalRestartBtn').addEventListener('click', restart);
+document.getElementById('aiBtn').addEventListener('click', toggleAI);
+document.getElementById('pomBtn').addEventListener('click', togglePom);
+document.getElementById('batBtn').addEventListener('click', toggleBat);
+document.getElementById('rl-btn').addEventListener('click', () => RL.startStop());
+document.getElementById('rl-apply').addEventListener('click', () => RL.applyBest());
+document.getElementById('rl-reset').addEventListener('click', () => RL.reset());
+document.getElementById('rl-prev-btn').addEventListener('click', () => RL.togglePreview());
+document.getElementById('rl-watch-btn').addEventListener('click', () => RL.toggleWatch());
+
 // ── Start ──────────────────────────────────────────────────────────────────
 RL.init();
 init();
@@ -1849,7 +2047,6 @@ document.getElementById('rl-speed').addEventListener('input', e => {
     document.getElementById('rl-speed-val').textContent = (+e.target.value * 0.1).toFixed(1);
 });
 
-// 初期表示
 RL._clearView('👁 単体  または  🎮 全体 を選択');
 </script>
 </body>
